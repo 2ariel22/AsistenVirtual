@@ -3,9 +3,10 @@ import json
 import speech_recognition as sr
 import pyttsx3
 from typing import Optional
-from pynput import keyboard
 import threading
 import queue
+import win32api
+import time
 
 class AsistenteVirtual:
     def __init__(self, url='http://localhost:1234/v1/chat/completions'):
@@ -22,21 +23,20 @@ class AsistenteVirtual:
                 self.engine.setProperty('voice', voice.id)
         self.is_listening = False
         self.audio_queue = queue.Queue()
+        self.running = True
         
-    def escuchar_evento_tecla(self):
-        def on_press(key):
-            if hasattr(key, 'char') and key.char == 'p':
+    def escuchar_evento_raton(self):
+        MIDDLE_BUTTON = 0x04  
+        
+        while self.running:
+            if win32api.GetKeyState(MIDDLE_BUTTON) < 0:  
                 if not self.is_listening:
                     self.is_listening = True
-                    print("\nGrabando... (suelta 'p' para detener)")
+                    print("\nGrabando... (suelta el botón del scroll para detener)")
                     self.grabar_audio()
-
-        def on_release(key):
-            if hasattr(key, 'char') and key.char == 'p':
+            else:
                 self.is_listening = False
-                
-        with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-            listener.join()
+            time.sleep(0.1) 
 
     def grabar_audio(self):
         with sr.Microphone() as source:
@@ -96,27 +96,30 @@ class AsistenteVirtual:
 
 def main():
     asistente = AsistenteVirtual()
-    print("Asistente Virtual: ¡Qué onda! Mantén presionada la tecla 'p' para hablar (di 'salir' para terminar)")
-    asistente.hablar("¡Qué onda! Presiona p para hablar conmigo")
+    print("Asistente Virtual: ¡Qué onda! Mantén presionado el botón del scroll para hablar (di 'salir' para terminar)")
+    asistente.hablar("¡Qué onda! Presiona el botón del scroll para hablar conmigo")
     
-    # Iniciar thread para escuchar eventos del teclado
-    keyboard_thread = threading.Thread(target=asistente.escuchar_evento_tecla)
-    keyboard_thread.daemon = True
-    keyboard_thread.start()
     
-    while True:
-        entrada = asistente.procesar_audio()
-        
-        if entrada:
-            if entrada.lower() == 'salir':
-                mensaje_despedida = "¡Nos vemos!"
-                print("\nAsistente Virtual:", mensaje_despedida)
-                asistente.hablar(mensaje_despedida)
-                break
+    mouse_thread = threading.Thread(target=asistente.escuchar_evento_raton)
+    mouse_thread.daemon = True
+    mouse_thread.start()
+    
+    try:
+        while True:
+            entrada = asistente.procesar_audio()
             
-            respuesta = asistente.responder(entrada)
-            print("\nAsistente Virtual:", respuesta)
-            asistente.hablar(respuesta)
+            if entrada:
+                if entrada.lower() == 'salir':
+                    mensaje_despedida = "¡Nos vemos!"
+                    print("\nAsistente Virtual:", mensaje_despedida)
+                    asistente.hablar(mensaje_despedida)
+                    break
+                
+                respuesta = asistente.responder(entrada)
+                print("\nAsistente Virtual:", respuesta)
+                asistente.hablar(respuesta)
+    finally:
+        asistente.running = False  
 
 if __name__ == "__main__":
     main()
